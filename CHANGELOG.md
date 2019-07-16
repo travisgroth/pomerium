@@ -22,6 +22,8 @@
 
 - Add support for large cookie sessions by chunking. [GH-211]
 
+- Add Informational Metrics [GH-227]
+
 ## v0.1.0
 
 ### NEW

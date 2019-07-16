@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/spf13/viper"
-	"google.golang.org/grpc"
-
 	"github.com/pomerium/pomerium/authenticate"
 	"github.com/pomerium/pomerium/authorize"
 	"github.com/pomerium/pomerium/internal/config"
@@ -24,6 +22,8 @@ import (
 	pbAuthenticate "github.com/pomerium/pomerium/proto/authenticate"
 	pbAuthorize "github.com/pomerium/pomerium/proto/authorize"
 	"github.com/pomerium/pomerium/proxy"
+	"github.com/spf13/viper"
+	"google.golang.org/grpc"
 )
 
 var versionFlag = flag.Bool("version", false, "prints the version")
@@ -87,6 +87,7 @@ func main() {
 
 	if opt.MetricsAddr != "" {
 		go newPromListener(opt.MetricsAddr)
+		metrics.SetBuildInfo(opt.Services)
 	}
 
 	if srv, err := startRedirectServer(opt.HTTPRedirectAddr); err != nil {
@@ -162,6 +163,8 @@ func newPromListener(addr string) {
 	metrics.RegisterView(metrics.HTTPServerViews)
 	metrics.RegisterView(metrics.GRPCClientViews)
 	metrics.RegisterView(metrics.GRPCServerViews)
+	metrics.RegisterInfoMetrics()
+	metrics.RegisterView(metrics.InfoViews)
 
 	log.Info().Str("MetricsAddr", addr).Msg("cmd/pomerium: starting prometheus endpoint")
 	log.Error().Err(metrics.NewPromHTTPListener(addr)).Str("MetricsAddr", addr).Msg("cmd/pomerium: could not start metrics exporter")
@@ -206,6 +209,14 @@ func parseOptions(configFile string) (*config.Options, error) {
 	if o.LogLevel != "" {
 		log.SetLevel(o.LogLevel)
 	}
+	metrics.AddPolicyCountCallback(o.Services, func() int64 {
+		return int64(len(o.Policies))
+	})
+	checksumInt, err := strconv.ParseInt(fmt.Sprintf("0x%s", o.Checksum()), 0, 64)
+	if err != nil {
+		log.Warn().Err(err).Msg("Could not parse config checksum into integer")
+	}
+	metrics.SetConfigChecksum(o.Services, checksumInt)
 	return o, nil
 }
 
@@ -213,6 +224,7 @@ func handleConfigUpdate(opt *config.Options, services []config.OptionsUpdater) *
 	newOpt, err := parseOptions(*configFile)
 	if err != nil {
 		log.Error().Err(err).Msg("cmd/pomerium: could not reload configuration")
+		metrics.SetConfigInfo(opt.Services, false, "")
 		return opt
 	}
 	optChecksum := opt.Checksum()
@@ -232,8 +244,12 @@ func handleConfigUpdate(opt *config.Options, services []config.OptionsUpdater) *
 	for _, service := range services {
 		if err := service.UpdateOptions(*newOpt); err != nil {
 			log.Error().Err(err).Msg("cmd/pomerium: could not update options")
+			metrics.SetConfigInfo(opt.Services, false, "")
 		}
 	}
-
+	metrics.AddPolicyCountCallback(newOpt.Services, func() int64 {
+		return int64(len(newOpt.Policies))
+	})
+	metrics.SetConfigInfo(newOpt.Services, true, newOptChecksum)
 	return newOpt
 }
