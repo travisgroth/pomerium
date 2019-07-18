@@ -10,6 +10,9 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
+	"google.golang.org/grpc"
+
 	"github.com/pomerium/pomerium/authenticate"
 	"github.com/pomerium/pomerium/authorize"
 	"github.com/pomerium/pomerium/internal/config"
@@ -22,8 +25,6 @@ import (
 	pbAuthenticate "github.com/pomerium/pomerium/proto/authenticate"
 	pbAuthorize "github.com/pomerium/pomerium/proto/authorize"
 	"github.com/pomerium/pomerium/proxy"
-	"github.com/spf13/viper"
-	"google.golang.org/grpc"
 )
 
 var versionFlag = flag.Bool("version", false, "prints the version")

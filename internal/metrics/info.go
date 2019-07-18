@@ -5,9 +5,9 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/pomerium/pomerium/internal/log"
 	"github.com/pomerium/pomerium/internal/version"
 
-	"github.com/pomerium/pomerium/internal/log"
 	"go.opencensus.io/metric"
 	"go.opencensus.io/metric/metricdata"
 	"go.opencensus.io/metric/metricproducer"
@@ -21,14 +21,15 @@ var (
 	configLastReload        = stats.Int64("config_last_reload_success_timestamp", "Timestamp of last successful config reload", "seconds")
 	configLastReloadSuccess = stats.Int64("config_last_reload_success", "Returns 1 if last reload was successful", "1")
 
-	// Metrics that may/must be measured or set up before the config is fully parsed
-	// and metric views are initialized
+	// Metrics that may/must be measured or set up before the config is fully
+	// parsed and metric views are initialized
 	buildInfo      *metric.Int64Gauge
 	policyCount    *metric.Int64DerivedGauge
 	configChecksum *metric.Int64Gauge
 	metricRegistry = metric.NewRegistry()
 
-	// ConfigLastReloadView contains the timestamp the configuration was last reloaded, labeled by service
+	// ConfigLastReloadView contains the timestamp the configuration was last
+	// reloaded, labeled by service
 	ConfigLastReloadView = &view.View{
 		Name:        configLastReload.Name(),
 		Description: configLastReload.Description(),
@@ -37,7 +38,8 @@ var (
 		Aggregation: view.LastValue(),
 	}
 
-	// ConfigLastReloadSuccessView contains the result of the last configuration reload, labeled by service
+	// ConfigLastReloadSuccessView contains the result of the last configuration
+	//  reload, labeled by service
 	ConfigLastReloadSuccessView = &view.View{
 		Name:        configLastReloadSuccess.Name(),
 		Description: configLastReloadSuccess.Description(),
@@ -47,7 +49,7 @@ var (
 	}
 )
 
-// SetBuildInfo records the pomerium build info.  You must call RegisterInfoMetrics to
+// SetBuildInfo records the pomerium build info.You must call RegisterInfoMetrics to
 // have this exported
 func SetBuildInfo(service string) {
 	if buildInfo == nil {
