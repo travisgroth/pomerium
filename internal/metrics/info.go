@@ -49,7 +49,7 @@ var (
 	}
 )
 
-// SetBuildInfo records the pomerium build info.You must call RegisterInfoMetrics to
+// SetBuildInfo records the pomerium build info. You must call RegisterInfoMetrics to
 // have this exported
 func SetBuildInfo(service string) {
 	if buildInfo == nil {
