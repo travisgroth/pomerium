@@ -28,6 +28,7 @@ import (
 	"github.com/pomerium/pomerium/internal/grpc/session"
 	"github.com/pomerium/pomerium/internal/grpc/user"
 	"github.com/pomerium/pomerium/internal/log"
+	"github.com/pomerium/pomerium/internal/telemetry/trace"
 )
 
 // Evaluator specifies the interface for a policy engine.
@@ -102,6 +103,8 @@ func New(options *config.Options) (*Evaluator, error) {
 
 // Evaluate evaluates the policy against the request.
 func (e *Evaluator) Evaluate(ctx context.Context, req *Request) (*Result, error) {
+	ctx, span := trace.StartSpan(ctx, "authorize.evaluator.Evaluate")
+	defer span.End()
 	isValid, err := isValidClientCertificate(e.clientCA, req.HTTP.ClientCertificate)
 	if err != nil {
 		return nil, fmt.Errorf("error validating client certificate: %w", err)
