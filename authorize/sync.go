@@ -67,10 +67,12 @@ func (a *Authorize) forceSync(ctx context.Context, ss *sessions.State) (*user.Us
 	if ss == nil {
 		return nil, nil
 	}
+	log.Debug().Msg("syncing session")
 	s := a.forceSyncSession(ctx, ss.ID)
 	if s == nil {
 		return nil, errors.New("session not found")
 	}
+	log.Debug().Msg("syncing user")
 	u := a.forceSyncUser(ctx, s.GetUserId())
 	return u, nil
 }
@@ -82,17 +84,20 @@ func (a *Authorize) forceSyncSession(ctx context.Context, sessionID string) sess
 	ctx, clearTimeout := context.WithTimeout(ctx, forceSyncRecordMaxWait)
 	defer clearTimeout()
 
+	log.Debug().Msg("getting session data")
 	s, ok := a.store.GetRecordData(grpcutil.GetTypeURL(new(session.Session)), sessionID).(*session.Session)
 	if ok {
 		return s
 	}
 
+	log.Debug().Msg("getting service account data")
 	sa, ok := a.store.GetRecordData(grpcutil.GetTypeURL(new(user.ServiceAccount)), sessionID).(*user.ServiceAccount)
 	if ok {
 		return sa
 	}
 
 	// wait for the session to show up
+	log.Debug().Msg("waiting for records")
 	record, err := a.waitForRecordSync(ctx, grpcutil.GetTypeURL(new(session.Session)), sessionID)
 	if err != nil {
 		return nil
@@ -130,22 +135,34 @@ func (a *Authorize) forceSyncUser(ctx context.Context, userID string) *user.User
 
 // waitForRecordSync waits for the first sync of a record to complete
 func (a *Authorize) waitForRecordSync(ctx context.Context, recordTypeURL, recordID string) (proto.Message, error) {
+	ctx, span := trace.StartSpan(ctx, "authorize.sync.waitForRecordSync")
+	defer span.End()
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = time.Millisecond
 	bo.MaxElapsedTime = 0
 	bo.Reset()
 
 	for {
+		ctx, span := trace.StartSpan(ctx, "authorize.sync.waitForRecordSync.loop")
+		defer span.End()
+
+		ctx, span = trace.StartSpan(ctx, "authorize.sync.waitForRecordSync.loop.GetRecordData")
+
+		log.Debug().Str("record-id", recordID).Str("type", recordTypeURL).Msg("getting record frm store")
 		current := a.store.GetRecordData(recordTypeURL, recordID)
 		if current != nil {
 			// record found, so it's already synced
 			return current, nil
 		}
+		defer span.End()
 
+		ctx, span = trace.StartSpan(ctx, "authorize.sync.waitForRecordSync.loop.Load")
+		log.Debug().Str("record-id", recordID).Str("type", recordTypeURL).Msg("getting record from databroker")
 		_, err := a.state.Load().dataBrokerClient.Get(ctx, &databroker.GetRequest{
 			Type: recordTypeURL,
 			Id:   recordID,
 		})
+		defer span.End()
 		if status.Code(err) == codes.NotFound {
 			// record not found, so no need to wait
 			return nil, nil

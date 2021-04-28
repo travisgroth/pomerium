@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 
@@ -21,14 +22,20 @@ import (
 
 // Check implements the envoy auth server gRPC endpoint.
 func (a *Authorize) Check(ctx context.Context, in *envoy_service_auth_v3.CheckRequest) (out *envoy_service_auth_v3.CheckResponse, err error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
+	log.Info().Msg("performing check")
+	defer cancel()
 	ctx, span := trace.StartSpan(ctx, "authorize.grpc.Check")
 	defer span.End()
 
+	log.Debug().Msg("loading current state")
 	state := a.state.Load()
 
 	// convert the incoming envoy-style http request into a go-style http request
+	log.Debug().Msg("decoding request")
 	hreq := getHTTPRequestFromCheckRequest(in)
 
+	log.Debug().Msg("checking for forward auth")
 	isForwardAuth := a.isForwardAuth(in)
 	if isForwardAuth {
 		// update the incoming http request's uri to match the forwarded URI
@@ -41,15 +48,18 @@ func (a *Authorize) Check(ctx context.Context, in *envoy_service_auth_v3.CheckRe
 		}
 	}
 
+	log.Debug().Msg("loading session")
 	rawJWT, _ := loadRawSession(hreq, a.currentOptions.Load(), state.encoder)
 	sessionState, _ := loadSession(state.encoder, rawJWT)
 
+	log.Debug().Msg("running force sync")
 	u, err := a.forceSync(ctx, sessionState)
 	if err != nil {
 		log.Warn().Err(err).Msg("clearing session due to force sync failed")
 		sessionState = nil
 	}
 
+	log.Debug().Msg("evaluating request")
 	req, err := a.getEvaluatorRequestFromCheckRequest(in, sessionState)
 	if err != nil {
 		log.Warn().Err(err).Msg("error building evaluator request")

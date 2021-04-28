@@ -97,9 +97,12 @@ func (s *Store) ClearRecords() {
 // GetRecordData gets a record's data from the store. `nil` is returned
 // if no record exists for the given type and id.
 func (s *Store) GetRecordData(typeURL, id string) proto.Message {
+	l := log.With().Str("type", typeURL).Str("id", id).Logger()
+
+	l.Debug().Msg("locking mutex")
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
+	l.Debug().Msg("getting data from map")
 	m, ok := s.dataBrokerData[typeURL]
 	if !ok {
 		return nil
